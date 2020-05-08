@@ -101,7 +101,7 @@ pub trait Handler<A, B> {
     /// The future response value of this handler.
     type Fut: Future<Output = Result<B, Self::Error>>;
     /// Process the incoming event and return the response asynchronously.
-    fn call(&mut self, event: A) -> Self::Fut;
+    fn call(&self, event: A) -> Self::Fut;
 }
 
 /// Returns a new `HandlerFn` with the given closure.
@@ -123,7 +123,7 @@ where
 {
     type Error = Error;
     type Fut = Fut;
-    fn call(&mut self, req: A) -> Self::Fut {
+    fn call(&self, req: A) -> Self::Fut {
         // we pass along the context here
         (self.f)(req)
     }
@@ -157,12 +157,11 @@ where
     A: for<'de> Deserialize<'de>,
     B: Serialize,
 {
-    let mut handler = handler;
     let config = Config::from_env()?;
     let uri = config.endpoint.try_into().expect("Unable to convert to URL");
     let client = Client::with(uri, hyper::Client::new());
     let incoming = incoming(&client);
-    run_inner(&client, incoming, &mut handler).await?;
+    run_inner(&client, incoming, &handler).await?;
 
     Ok(())
 }
@@ -175,11 +174,10 @@ where
     A: for<'de> Deserialize<'de>,
     B: Serialize,
 {
-    let mut handler = handler;
     let uri = url.try_into().expect("Unable to convert to URL");
     let client = Client::with(uri, hyper::Client::new());
     let incoming = incoming(&client).take(1);
-    run_inner(&client, incoming, &mut handler).await?;
+    run_inner(&client, incoming, &handler).await?;
 
     Ok(())
 }
@@ -196,7 +194,7 @@ fn incoming(client: &Client) -> impl Stream<Item = Result<http::Response<hyper::
 async fn run_inner<A, B, F>(
     client: &Client,
     incoming: impl Stream<Item = Result<http::Response<hyper::Body>, Error>> + Unpin,
-    handler: &mut F,
+    handler: &F,
 ) -> Result<(), Error>
 where
     F: Handler<A, B>,
